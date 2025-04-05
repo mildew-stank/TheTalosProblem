@@ -1,10 +1,11 @@
 from stacking import TheTalosProblem as ttp
 
+
 def main() -> None:
     world = ttp()
     while True:
         user_input = input("Enter required stack height: ")
-        if user_input.lower() in ['exit', 'quit']:
+        if user_input.lower() in ["exit", "quit"]:
             return
         try:
             n = int(user_input)
@@ -18,4 +19,6 @@ def main() -> None:
         print("Final stack:")
         out = [i for i in world.world_space if i != 0]
         print(out)
+
+
 main()
