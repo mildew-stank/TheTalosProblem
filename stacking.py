@@ -1,146 +1,162 @@
-class TheTalosProblem:
+class Ruleset:
+    """
+    This class represents a simulation of a character navigating a 2D world made up of blocks.
+    The character can move, grab, and drop blocks within the world, subject to certain constraints.
+    Attributes:
+        world (list[int]): A list representing the heights of blocks in the 2D world.
+        position (int): The current position of the character in the world.
+        equipped (bool): Indicates whether the character is holding a block.
+    """
+
     def __init__(self):
-        self.world_space = []
-        self.ERROR_INDEX = -1
+        """Initializes the simulation with a default world of one block and the character at position 0."""
+        self.world = [1]
+        self.position = 0
+        self.equipped = False
 
-    def initialize_world_space(self, number_of_boxes: int) -> None:
-        """Sets world_space length to number_of_boxes, and all values to 1."""
-        self.world_space = [1] * number_of_boxes
+    def make_world(self, n: int) -> None:
+        """Creates a new world with `n` blocks, all of height 1, and resets the character's position to 0."""
+        self.world = [1] * n
+        self.position = 0
 
-    def can_move_left(self, index: int) -> bool:
+    def step(self, direction: int, allow_fall: bool = False) -> bool:
         """
-        Checks if the player index can move left.
-
-        The end of world_space or a stack of boxes Δ2 high returns False.
+        Moves the character one step in the specified direction if the move is valid.
+        Parameters:
+            direction (int): The direction to move (-1 for left, 1 for right).
+            allow_fall (bool): If True, allows the character to fall down by more than one block.
+        Returns:
+            bool: True if the step was successful, False otherwise.
         """
-        if index - 1 < 0:
+        destination = self.position + direction
+        if destination < 0 or destination >= len(self.world):
             return False
-        if self.world_space[index - 1] > self.world_space[index] + 1:
+        difference = self.world[destination] - self.world[self.position]
+        too_high = difference > 1
+        too_low = difference < -1
+        if too_high or (not allow_fall and too_low) or self.world[destination] == 0:
+            return False
+        self.position += direction
+        return True
+
+    def walk(self, direction: int, max_steps: int = -1, allow_fall: bool = False) -> bool:
+        """
+        Moves the character in the specified direction for up to `max_steps` steps or until movement is blocked.
+        Parameters:
+            direction (int): The direction to move (-1 for left, 1 for right).
+            max_steps (int): The maximum number of steps to take (-1 for unlimited).
+            allow_fall (bool): If True, allows the character to fall down by more than one block.
+        Returns:
+            bool: True if the character moved at least one step, False otherwise.
+        """
+        start = self.position
+        while self.step(direction, allow_fall) and (max_steps != 0):
+            max_steps -= 1
+        if start == self.position:
             return False
         return True
 
-    def can_move_right(self, index: int, can_fall: bool = False) -> bool:
+    def grab(self, direction: int) -> bool:
         """
-        Checks if the player index can move right.
-
-        The end of world_space, ground level,
-        or a stack of boxes Δ2 low if can_fall = True returns False.
+        Picks up a block from the specified direction if possible.
+        Parameters:
+            direction (int): The direction to grab the block from (-1 for left, 1 for right).
+        Returns:
+            bool: True if the block was successfully grabbed, False otherwise.
         """
-        if index + 1 >= len(self.world_space):
+        target = self.position + direction
+        if target < 0 or target >= len(self.world):
             return False
-        next_stack = self.world_space[index + 1]
-        if next_stack <= 0:
+        difference = self.world[target] - self.world[self.position]
+        if self.equipped or difference < -1 or self.world[target] == 0:
             return False
-        if can_fall:
-            return True
-        if next_stack < self.world_space[index] - 1 and next_stack > 0:
-            return False
+        self.world[target] -= 1
+        self.equipped = True
         return True
 
-    def traverse_left(self, start_index: int) -> int:
+    def drop(self, direction: int) -> bool:
         """
-        Returns player index after moving as far left as possible.
-
-        Returns ERROR_INDEX if something went wrong.
+        Drops a block in the specified direction if possible.
+        Parameters:
+            direction (int): The direction to drop the block (-1 for left, 1 for right).
+        Returns:
+            bool: True if the block was successfully dropped, False otherwise.
         """
-        for index in range(start_index, -1, -1):
-            if not self.can_move_left(index):
-                return index
-        return self.ERROR_INDEX
+        target = self.position + direction
+        if target < 0 or target >= len(self.world):
+            return False
+        difference = self.world[target] - self.world[self.position]
+        if not self.equipped or difference > 1:
+            return False
+        self.world[target] += 1
+        self.equipped = False
+        return True
 
-    def traverse_right(self, start_index: int, can_fall: bool = False) -> int:
-        """
-        Returns player index after moving as far right as possible.
 
-        Returns ERROR_INDEX if something went wrong.
-        """
-        for index in range(start_index, len(self.world_space)):
-            if not self.can_move_right(index, can_fall):
-                return index
-        return self.ERROR_INDEX
+class Solution(Ruleset):
+    """Extends `Ruleset` with stacking methods."""
 
-    def place_right_left(self, start_index: int) -> int:
-        """
-        Takes the rightmost box and drops it as far left as possible.
+    def stack_right(self):
+        """Takes blocks from the left side of world and stacks them up on the right."""
+        while True:
+            self.walk(-1)
+            self.grab(-1)
+            self.step(1)
+            self.grab(-1)
+            if not self.walk(1):
+                self.drop(-1)
+                return
+            self.step(-1)
+            self.drop(1)
 
-        Repeats until stuck, then returns player index.
-        """
-        start_index = self.traverse_right(start_index)  # start on the right.
-        if not self.can_move_left(start_index):
-            return start_index
-        index = start_index
-        while index > -1:
-            index = self.traverse_right(index) - 1  # step off the target box.
-            left_side = self.traverse_left(index)
-            self.world_space[index + 1] -= 1  # pick up a box to the right,
-            if not self.can_move_left(index):
-                self.world_space[index + 1] += 1  # place it back down,
-                return index
-            self.world_space[left_side] += 1  # or place it to the far left.
-            if not self.can_move_left(index):
-                return index  # don't move the index if the box got us stuck.
-            index -= 1
-        return index
+    def swap_left(self):
+        """Swaps places with blocks by shifting them to the left while traversing to the right."""
+        while True:
+            self.walk(1)
+            if not self.grab(1):
+                return
+            # spread out tall stacks behind us instead of swapping places
+            direction = 1
+            target = self.position + direction
+            difference = self.world[target] - self.world[self.position]
+            direction = max(-1, min(3 - difference, 1))
+            self.walk(direction, 3 - difference)
+            self.drop(-1)
 
-    def swap_left(self, start_index: int) -> int:
-        """
-        Takes the left box, moves left, drops the box right.
-
-        Repeats until stuck or at the end of world_space,
-        then returns player index.
-        """
-        for index in range(start_index, -1, -1):
-            if index - 1 < 0:
-                return index
-            if self.can_move_left(index):
-                continue
-            delta = self.world_space[index - 1] - self.world_space[index]
-            # if we run into a stack higher than Δ2, spread it out behind us.
-            if delta > 2:
-                for _ in range(delta - 1):
-                    delta = self.world_space[index - 1] - self.world_space[index]
-                    self.world_space[index - 1] -= 1
-                    self.world_space[index + delta - 2] += 1
-                continue
-            self.world_space[index - 1] -= 1
-            self.world_space[index] += 1  # it's safe to drop before moving left.
-        return 0
-
-    def get_max_height(self, boxes: int) -> int:
-        """Returns max attainable height with a given number of boxes."""
-        if boxes <= 0:
-            self.world_space.clear()
-            return self.ERROR_INDEX
-        self.initialize_world_space(boxes)
-        pos = boxes - 1
+    def find_peak_index(self, history: list[int]) -> int:
+        """Returns an index containing the highest peak"""
         peak = 0
-        last_peak = -1
-        last_pos = -1
-        history = []
-        while not (self.world_space in history):
-            history.append(self.world_space.copy())
-            pos = self.traverse_right(pos, True)
-            while not (pos == last_pos == 0 and peak == last_peak):
-                last_pos = pos
-                last_peak = peak
-                pos = self.place_right_left(pos)
-                pos = self.swap_left(pos)
-                peak = self.world_space[0]
-        max_peak = -1
-        snapshot_index = -1
-        for index, snapshot in enumerate(history):
-            if snapshot[0] > max_peak:
-                max_peak = snapshot[0]
-                snapshot_index = index
-        self.world_space = history[snapshot_index]
-        return max_peak
+        history_index = 0
+        for index, result in enumerate(history):
+            if result[-1] > peak:
+                peak = result[-1]
+                history_index = index
+        return history_index
 
-    def get_min_boxes(self, height: int) -> int:
-        """Returns min amount of boxes required to reach a given height."""
-        if height <= 0:
-            self.world_space.clear()
-            return self.ERROR_INDEX
-        boxes = 0
-        while self.get_max_height(boxes) < height:
-            boxes += 1
-        return boxes
+    def get_max_height(self, blocks: int) -> int:
+        """Returns the maximum reachable height for a given amount of `blocks`."""
+        if blocks < 1:
+            return 0
+        history = []
+        self.make_world(blocks)
+        while not self.world in history:
+            history.append(self.world.copy())
+            while True:
+                self.stack_right()
+                snapshot = self.world[-1]
+                self.swap_left()
+                if snapshot == self.world[-1]:
+                    break
+            self.walk(-1, -1, True)
+        index = self.find_peak_index(history)
+        self.world = history[index]
+        return history[index][-1]
+
+    def get_min_blocks(self, height: int) -> int:
+        """Returns the minimum amount of blocks required to reach a given `height`"""
+        if height < 1:
+            return 0
+        blocks = height
+        while self.get_max_height(blocks) < height:
+            blocks += 1
+        return blocks
